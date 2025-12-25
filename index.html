@@ -38,7 +38,6 @@
             text-decoration: line-through;
             background-color: #f9fafb;
         }
-        /* Đảm bảo nút thao tác không bị gạch ngang */
         .promo-deleted .action-btns {
             text-decoration: none !important;
             display: inline-block;
@@ -82,14 +81,15 @@
         }
         .promo-bar {
             position: absolute;
-            height: 28px;
-            top: 10px;
+            height: 32px;
+            top: 8px;
             border-radius: 6px;
             font-size: 8px;
             font-weight: 800;
             color: white;
             display: flex;
-            align-items: center;
+            flex-direction: column;
+            justify-content: center;
             padding: 0 8px;
             overflow: hidden;
             white-space: nowrap;
@@ -314,17 +314,30 @@
                             <button onclick="saveApiKey()" class="bg-gray-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-black transition shadow">Save</button>
                         </div>
                         
-                        <div class="flex gap-2">
-                            <select id="aiChannelSelect" class="flex-1 md:w-48 px-4 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-pink-500 font-bold">
-                                <option value="All Channels">🌐 Phân tích Tất cả kênh</option>
-                                <option value="Shopee/Lazada">🛒 Shopee/Lazada</option>
-                                <option value="Tiktok Shop">🎵 Tiktok Shop</option>
-                                <option value="Website">🏠 Official Website</option>
-                                <option value="Tiki">📦 Tiki</option>
-                            </select>
-                            <button onclick="analyzeProductsWithGemini()" id="aiGenerateBtn" class="flex-1 gradient-bg text-white py-2 px-6 rounded-xl font-black text-xs shadow-xl hover:scale-[1.02] active:scale-95 transition">
-                                <i class="fas fa-bolt mr-2"></i>GENERATE AI STRATEGY
-                            </button>
+                        <!-- AI Options Selector -->
+                        <div class="flex flex-wrap gap-2">
+                            <div class="flex-1 md:w-48">
+                                <label class="text-[9px] font-black text-gray-400 uppercase ml-1">Phân tích Kênh</label>
+                                <select id="aiChannelSelect" class="w-full px-4 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-pink-500 font-bold bg-white">
+                                    <option value="All Channels">🌐 Tất cả kênh</option>
+                                    <option value="Shopee/Lazada">🛒 Shopee/Lazada</option>
+                                    <option value="Tiktok Shop">🎵 Tiktok Shop</option>
+                                    <option value="Website">🏠 Official Website</option>
+                                    <option value="Tiki">📦 Tiki</option>
+                                </select>
+                            </div>
+                            <div class="flex-1 md:w-48">
+                                <label class="text-[9px] font-black text-gray-400 uppercase ml-1">Phân tích Nhóm Hàng</label>
+                                <select id="aiCategorySelect" class="w-full px-4 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-pink-500 font-bold bg-white">
+                                    <option value="All Categories">📂 Tất cả nhóm hàng</option>
+                                    <!-- Populated by JS -->
+                                </select>
+                            </div>
+                            <div class="w-full mt-2">
+                                <button onclick="analyzeProductsWithGemini()" id="aiGenerateBtn" class="w-full gradient-bg text-white py-3 px-6 rounded-xl font-black text-xs shadow-xl hover:scale-[1.01] active:scale-95 transition flex items-center justify-center">
+                                    <i class="fas fa-bolt mr-2"></i>GENERATE AI STRATEGY
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -332,7 +345,7 @@
                 <div id="analysisResults" class="min-h-[400px] bg-white rounded-2xl p-0 overflow-hidden border">
                     <div class="flex flex-col items-center justify-center py-24 text-gray-400 space-y-4">
                         <i class="fas fa-chart-pie text-5xl opacity-20"></i>
-                        <p class="font-bold text-center text-sm">Chọn kênh và nhấn nút phía trên để bắt đầu phân tích AI chuyên sâu.</p>
+                        <p class="font-bold text-center text-sm">Chọn phạm vi phân tích (Kênh/Nhóm hàng) và nhấn nút để bắt đầu.</p>
                     </div>
                 </div>
             </div>
@@ -682,6 +695,7 @@
             updateDashboard();
             renderProducts();
             renderPromotions();
+            updateAICategorySelector();
             
             if(GEMINI_API_KEY) {
                 const apiInput = document.getElementById('geminiApiKey');
@@ -753,6 +767,14 @@
             if (fCat) { fCat.innerHTML = '<option value="">All Categories</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join(''); }
             const datalist = document.getElementById('categoryDatalist');
             if (datalist) { datalist.innerHTML = cats.map(c => `<option value="${c}">`).join(''); }
+            updateAICategorySelector();
+        }
+
+        function updateAICategorySelector() {
+            const aiCatSel = document.getElementById('aiCategorySelect');
+            if (!aiCatSel) return;
+            const cats = getUniqueCategories();
+            aiCatSel.innerHTML = '<option value="All Categories">📂 Tất cả nhóm hàng</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
         }
 
         function showConfirmModal(text, onConfirm) {
@@ -843,41 +865,83 @@
             }
         }
 
+        // --- UPDATED AI ANALYSIS LOGIC ---
         async function analyzeProductsWithGemini() {
             if(!GEMINI_API_KEY) return showNotification("API Key Required!", "error");
             const output = document.getElementById('analysisResults');
             const btn = document.getElementById('aiGenerateBtn');
+            
             const selectedChannel = document.getElementById('aiChannelSelect').value;
+            const selectedCategory = document.getElementById('aiCategorySelect').value;
+            
             btn.disabled = true;
             btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>ANALYZING...`;
+            
+            let statusText = `Đang xây dựng chiến lược`;
+            if (selectedChannel !== "All Channels") statusText += ` cho ${selectedChannel}`;
+            if (selectedCategory !== "All Categories") statusText += ` - Nhóm hàng: ${selectedCategory}`;
+            
             output.innerHTML = `
                 <div class="flex flex-col items-center justify-center py-32 text-pink-500 bg-gray-50">
                     <div class="relative mb-8">
                         <i class="fas fa-brain text-7xl animate-pulse"></i>
                         <i class="fas fa-bolt absolute -top-2 -right-2 text-yellow-400 text-2xl animate-bounce"></i>
                     </div>
-                    <p class="text-xs text-gray-400 mt-2 font-bold uppercase tracking-widest">Đang xây dựng chiến lược cho kênh ${selectedChannel}...</p>
+                    <p class="text-xs text-gray-400 mt-2 font-bold uppercase tracking-widest">${statusText}...</p>
                 </div>`;
+
             const now = new Date();
             const startOfYear = new Date(now.getFullYear(), 0, 1);
             const pastDaysOfYear = (now - startOfYear) / 86400000;
             const currentWeek = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
             const currentMonth = now.getMonth() + 1;
-            const dataForAI = products.map(p => ({ 
+
+            // Filter products for AI context based on category
+            let filteredProducts = products;
+            if (selectedCategory !== "All Categories") {
+                filteredProducts = products.filter(p => p.category === selectedCategory);
+            }
+
+            const dataForAI = filteredProducts.map(p => ({ 
                 sku: p.sku, name: p.name, category: p.category, stock: p.stock_quantity, sales_l7d: p.sold_l7d, list_price: p.unit_price, status: p.status, stock_weeks: p.sold_l7d > 0 ? (p.stock_quantity / p.sold_l7d).toFixed(1) : 'High'
             }));
-            const activePromosForAI = promotions.filter(p => !p.deleted).map(p => ({
-                name: p.promotion_name, type: p.promotion_type, tool: p.promotion_tool, channel: p.channel, skus: p.product_ids.map(id => products.find(prod => prod.id === id)?.sku).filter(s => s), mechanics: p.details, start: p.start_date, end: p.end_date
-            }));
+
+            // Filter promos based on channel and selected category products
+            const activePromosForAI = promotions
+                .filter(p => !p.deleted && (selectedChannel === "All Channels" || p.channel === selectedChannel))
+                .map(p => ({
+                    name: p.promotion_name, type: p.promotion_type, tool: p.promotion_tool, channel: p.channel,
+                    skus: p.product_ids.map(id => products.find(prod => prod.id === id)?.sku).filter(s => s),
+                    mechanics: p.details, start: p.start_date, end: p.end_date
+                }));
+
             let channelContext = "";
             switch(selectedChannel) {
-                case 'Tiktok Shop': channelContext = "Mô hình: Content-driven Commerce. Ưu tiên 'Deal hời chớp nhoáng', Voucher Video và các công cụ Livestream như Comment-to-Buy."; break;
-                case 'Shopee/Lazada': channelContext = "Mô hình: Marketplace Search. Ưu tiên Add-on Deals, Combo Bundle và Flash Sale sàn."; break;
-                case 'Website': channelContext = "Mô hình: DTC. Ưu tiên Membership Loyalty, Early Access và các cơ chế Referral."; break;
-                case 'Tiki': channelContext = "Mô hình: Fast Delivery. Tập trung giao nhanh 2h và các ưu đãi Member-Only Prices."; break;
-                default: channelContext = "Mô hình: Omnichannel.";
+                case 'Tiktok Shop': channelContext = "Kênh TikTok Shop ưu tiên Content-driven Commerce, Livestream, Voucher Video."; break;
+                case 'Shopee/Lazada': channelContext = "Kênh Shopee/Lazada ưu tiên SEO, Marketplace Search, Flash Sale sàn."; break;
+                case 'Website': channelContext = "Kênh Website ưu tiên DTC, Loyalty, Referral."; break;
+                case 'Tiki': channelContext = "Kênh Tiki ưu tiên giao hàng nhanh 2h, chất lượng chính hãng."; break;
+                default: channelContext = "Đang phân tích mô hình đa kênh (Omnichannel).";
             }
-            const systemPrompt = `BẠN LÀ: Một Giám đốc Tăng trưởng (Head of Growth) Ecommerce của iBasic. THỜI ĐIỂM: Tuần ${currentWeek}, Tháng ${currentMonth}. KÊNH MỤC TIÊU: ${selectedChannel}. BỐI CẢNH: ${channelContext} DỮ LIỆU TỒN KHO & BÁN HÀNG (L7D): ${JSON.stringify(dataForAI)}. DỮ LIỆU KHUYẾN MÃI ĐANG CHẠY: ${JSON.stringify(activePromosForAI)}. QUY ƯỚC GIÁ: Cột 'list_price' là GIÁ NIÊM YẾT. NHIỆM VỤ: Đề xuất chiến lược PUSH DOANH SỐ. YÊU CẦU: HTML + Tailwind, phần Performance Matrix, Strategy đề xuất, Roadmap chi tiết.`;
+
+            const systemPrompt = `BẠN LÀ: Một Giám đốc Tăng trưởng (Head of Growth) Ecommerce của iBasic. 
+            THỜI ĐIỂM: Tuần ${currentWeek}, Tháng ${currentMonth}.
+            MỤC TIÊU PHÂN TÍCH: 
+            - Kênh: ${selectedChannel} (Bối cảnh: ${channelContext})
+            - Nhóm hàng: ${selectedCategory}
+            
+            DỮ LIỆU TỒN KHO & BÁN HÀNG CỦA NHÓM HÀNG NÀY (L7D): ${JSON.stringify(dataForAI)}.
+            DỮ LIỆU KHUYẾN MÃI ĐANG CHẠY: ${JSON.stringify(activePromosForAI)}.
+            
+            NHIỆM VỤ: Phân tích và đề xuất chiến lược PUSH DOANH SỐ cụ thể cho phạm vi đã chọn. 
+            
+            YÊU CẦU TRÌNH BÀY (CHUYÊN NGHIỆP):
+            - Sử dụng HTML và Tailwind CSS.
+            - Phần 1: Performance Matrix (Đánh giá nhóm hàng/SKU trong phạm vi).
+            - Phần 2: Đề xuất Chiến lược Giá & Execution Tools (Chọn từ các công cụ có sẵn).
+            - Phần 3: Roadmap thực thi cho ${selectedChannel} tập trung vào ${selectedCategory}.
+            - Chỉ trả về HTML trong 1 thẻ div. Không markdown.`;
+            
             try {
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`, {
                     method: 'POST',
@@ -887,7 +951,7 @@
                 const result = await response.json();
                 const cleanHtml = result.candidates[0].content.parts[0].text.replace(/```html|```/g, '').trim();
                 output.innerHTML = cleanHtml;
-                showNotification(`Đã phân tích chiến lược cho kênh ${selectedChannel}`, "success");
+                showNotification(`Đã phân tích chiến lược xong!`, "success");
             } catch (err) { 
                 output.innerHTML = `<div class="text-center py-24 text-red-500"><i class="fas fa-exclamation-triangle text-5xl mb-4"></i><p class="font-black text-lg">LỖI PHÂN TÍCH AI</p></div>`; 
                 showNotification("Lỗi AI Analysis", "error");
@@ -929,7 +993,6 @@
         function confirmDeleteProduct(id) { showConfirmModal("Delete this SKU?", () => { products = products.filter(p => p.id !== id); saveData(); updateCategoryUI(); renderProducts(); }); }
         function confirmDeleteAllProducts() { showConfirmModal("Delete ALL products?", () => { products = []; saveData(); updateCategoryUI(); renderProducts(); showNotification("All products deleted", "info"); }); }
 
-        // --- UPDATED RENDER PROMOTIONS WITH SOFT DELETED LOGIC ---
         function renderPromotions() {
             const tbody = document.getElementById('promotionsTableBody'); if(!tbody) return;
             const search = document.getElementById('promoFilterSearch')?.value.toLowerCase() || "";
@@ -947,8 +1010,6 @@
             tbody.innerHTML = filtered.map(p => {
                 const skuList = p.product_ids.map(id => products.find(prod => prod.id === id)?.sku).filter(s => s).join(', ');
                 const isDeleted = p.deleted;
-                // Hiển thị gạch ngang (strike-through) chỉ khi đang lọc chế độ "All"
-                // Khi lọc "Soft Deleted" thì không gạch ngang để dễ đọc
                 const useDeletedStyle = isDeleted && status === 'all';
                 
                 return `<tr class="transition border-b last:border-0 ${useDeletedStyle ? 'promo-deleted' : 'hover:bg-gray-50'}">
@@ -958,9 +1019,31 @@
                     <td class="px-4 py-3 text-center text-[10px] text-gray-600">${p.promotion_tool}</td>
                     <td class="px-4 py-3 text-[10px] italic text-gray-500 max-w-[200px] break-words">${p.details || 'N/A'}</td>
                     <td class="px-4 py-3 text-[9px] text-gray-500 font-mono">${new Date(p.start_date).toLocaleDateString()} - ${new Date(p.end_date).toLocaleDateString()}</td>
-                    <td class="px-4 py-3 text-center action-btns space-x-1">${isDeleted ? `<button onclick="restorePromo(${p.id})" class="text-green-500 p-1" title="Khôi phục"><i class="fas fa-undo"></i></button>` : `<button onclick="editPromotion(${p.id})" class="text-blue-500 p-1"><i class="fas fa-edit"></i></button><button onclick="confirmDeletePromo(${p.id})" class="text-red-400 p-1"><i class="fas fa-trash-alt"></i></button>`}</td>
+                    <td class="px-4 py-3 text-center action-btns space-x-1">${isDeleted ? `<button onclick="restorePromo(${p.id})" class="text-green-500 p-1" title="Khôi phục"><i class="fas fa-undo"></i></button>` : `<button onclick="copyPromotion(${p.id})" class="text-green-500 p-1" title="Sao chép (Nhân bản)"><i class="fas fa-copy"></i></button><button onclick="editPromotion(${p.id})" class="text-blue-500 p-1" title="Chỉnh sửa"><i class="fas fa-edit"></i></button><button onclick="confirmDeletePromo(${p.id})" class="text-red-400 p-1" title="Xóa tạm"><i class="fas fa-trash-alt"></i></button>`}</td>
                 </tr>`;
             }).join('');
+        }
+
+        function copyPromotion(id) {
+            const p = promotions.find(item => item.id === id);
+            if(!p) return;
+            openAddPromotionModal();
+            document.getElementById('promoIdToEdit').value = '';
+            const f = document.getElementById('addPromotionForm');
+            f.elements['promotion_name'].value = p.promotion_name + ' (Copy)';
+            f.elements['promotion_type'].value = p.promotion_type;
+            f.elements['promotion_tool'].value = p.promotion_tool;
+            f.elements['start_date'].value = p.start_date;
+            f.elements['end_date'].value = p.end_date;
+            f.elements['channel'].value = p.channel;
+            f.elements['details'].value = p.details;
+            setTimeout(() => {
+                document.querySelectorAll('.promo-sku-cb').forEach(cb => {
+                    cb.checked = p.product_ids.includes(parseInt(cb.value));
+                });
+                updateSelectedCount();
+            }, 50);
+            showNotification("Đã sao chép cấu hình khuyến mãi. Hãy điều chỉnh và lưu mới.", "info");
         }
 
         function confirmDeletePromo(id) { showConfirmModal("Delete this promotion?", () => { const p = promotions.find(item => item.id === id); if(p) { p.deleted = true; saveData(); renderPromotions(); updateDashboard(); } }); }
@@ -1008,7 +1091,6 @@
         }
 
         function downloadSelectedWeeksCSV() { exportPromotionsToCSV(); }
-        
         function parseCleanNumber(val) { if (!val) return 0; const cleaned = val.toString().replace(/[^\d]/g, ''); return parseInt(cleaned) || 0; }
 
         function handleFileImport(e) { 
@@ -1040,9 +1122,80 @@
         }
 
         function downloadSampleCSV() { const csv = "\uFEFFSKU,Product Name,Status,Category,Stock,Price,Sold L7D\nBRA-101,Comfort Bra,Active,Bra,100,250000,10"; const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "ibasic_sample.csv"; link.click(); }
-
         function getWeekRange(weekNo, year) { const jan1 = new Date(year, 0, 1); const startOfFirstWeek = new Date(jan1); const dayOffset = jan1.getDay() === 0 ? -6 : 1 - jan1.getDay(); startOfFirstWeek.setDate(jan1.getDate() + dayOffset); const start = new Date(startOfFirstWeek); start.setDate(startOfFirstWeek.getDate() + (weekNo - 1) * 7); const end = new Date(start); end.setDate(start.getDate() + 6); return { start, end }; }
-        function renderWeeklyTimeline() { const container = document.getElementById('calendarView'); if(!container) return; const year = parseInt(document.getElementById('timelineYearSelect').value); const startW = parseInt(document.getElementById('viewStartWeek').value); const endW = parseInt(document.getElementById('viewEndWeek').value); let html = ''; for (let w = startW; w <= endW; w++) { const { start, end } = getWeekRange(w, year); const activeInWeek = promotions.filter(p => !p.deleted && (new Date(p.start_date) <= end && new Date(p.end_date) >= start)); html += `<div class="projection-week"><div class="flex items-end justify-between mb-4 border-b border-gray-100 pb-2"><h3 class="text-lg font-black text-gray-800">Week ${w} <span class="text-[10px] text-gray-300 font-normal ml-2 uppercase tracking-tighter">${start.toLocaleDateString()} - ${end.toLocaleDateString()}</span></h3></div><div class="projection-grid shadow-sm rounded-xl overflow-hidden"><div class="projection-header">Project / Days</div>${[0,1,2,3,4,5,6].map(d => { const cur = new Date(start); cur.setDate(start.getDate() + d); const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']; return `<div class="projection-header bg-gray-50/50 day-col">${dayNames[d]}<br><span class="text-[8px] opacity-60">${cur.getDate()}/${cur.getMonth()+1}</span></div>`; }).join('')}${activeInWeek.length === 0 ? `<div class="col-span-8 py-10 text-center text-[10px] text-gray-300 italic">No Campaigns scheduled</div>` : activeInWeek.map(p => { const pStart = new Date(p.start_date); const pEnd = new Date(p.end_date); const startDayOnly = new Date(start); startDayOnly.setHours(0,0,0,0); let startDayOffset = Math.max(0, Math.floor((pStart.getTime() - startDayOnly.getTime()) / (24 * 60 * 60 * 1000))); let endDayOffset = Math.min(7, Math.ceil((pEnd.getTime() - startDayOnly.getTime()) / (24 * 60 * 60 * 1000))); if (pStart < start) startDayOffset = 0; if (pEnd > end) endDayOffset = 7; const leftPercent = (startDayOffset / 7) * 100; const widthPercent = ((endDayOffset - startDayOffset) / 7) * 100; return `<div class="projection-row col-span-8 flex items-center h-12"><div class="w-[140px] px-3 text-[9px] font-black truncate text-gray-500 border-r h-full flex items-center bg-gray-50/20">${p.promotion_name}</div><div class="flex-1 relative h-full"><div class="absolute inset-0 grid grid-cols-7 pointer-events-none">${[0,1,2,3,4,5,6].map(() => `<div class="border-r border-gray-100 h-full"></div>`).join('')}</div><div class="promo-bar ${getChannelColorClass(p.channel)}" style="left: ${leftPercent}%; width: ${widthPercent}%;" onclick="editPromotion(${p.id})"><div class="flex items-center space-x-1 truncate"><span class="font-black uppercase text-[7px] tracking-tighter">[${p.promotion_type}]</span><span class="truncate font-bold">${p.promotion_name}</span></div></div></div></div>`; }).join('')}</div></div>`; } container.innerHTML = html || `<div class="py-20 text-center text-gray-400">No data found</div>`; }
+        
+        function renderWeeklyTimeline() {
+            const container = document.getElementById('calendarView');
+            if(!container) return;
+            const year = parseInt(document.getElementById('timelineYearSelect').value);
+            const startW = parseInt(document.getElementById('viewStartWeek').value);
+            const endW = parseInt(document.getElementById('viewEndWeek').value);
+            let html = '';
+            for (let w = startW; w <= endW; w++) {
+                const { start, end } = getWeekRange(w, year);
+                const activeInWeek = promotions.filter(p => !p.deleted && (new Date(p.start_date) <= end && new Date(p.end_date) >= start));
+                html += `
+                <div class="projection-week">
+                    <div class="flex items-end justify-between mb-4 border-b border-gray-100 pb-2">
+                        <h3 class="text-lg font-black text-gray-800">Week ${w} 
+                            <span class="text-[10px] text-gray-300 font-normal ml-2 uppercase tracking-tighter">
+                                ${start.toLocaleDateString()} - ${end.toLocaleDateString()}
+                            </span>
+                        </h3>
+                    </div>
+                    <div class="projection-grid shadow-sm rounded-xl overflow-hidden">
+                        <div class="projection-header">Project / Days</div>
+                        ${[0,1,2,3,4,5,6].map(d => {
+                            const cur = new Date(start);
+                            cur.setDate(start.getDate() + d);
+                            const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                            return `<div class="projection-header bg-gray-50/50 day-col">${dayNames[d]}<br><span class="text-[8px] opacity-60">${cur.getDate()}/${cur.getMonth()+1}</span></div>`;
+                        }).join('')}
+                        ${activeInWeek.length === 0 ? `
+                            <div class="col-span-8 py-10 text-center text-[10px] text-gray-300 italic">No Campaigns scheduled</div>
+                        ` : activeInWeek.map(p => {
+                            const pStart = new Date(p.start_date);
+                            const pEnd = new Date(p.end_date);
+                            const startDayOnly = new Date(start);
+                            startDayOnly.setHours(0,0,0,0);
+                            let startDayOffset = Math.max(0, Math.floor((pStart.getTime() - startDayOnly.getTime()) / (24 * 60 * 60 * 1000)));
+                            let endDayOffset = Math.min(7, Math.ceil((pEnd.getTime() - startDayOnly.getTime()) / (24 * 60 * 60 * 1000)));
+                            if (pStart < start) startDayOffset = 0;
+                            if (pEnd > end) endDayOffset = 7;
+                            const leftPercent = (startDayOffset / 7) * 100;
+                            const widthPercent = ((endDayOffset - startDayOffset) / 7) * 100;
+                            const fullDetails = `Tool: ${p.promotion_tool}\nMechanics: ${p.details || 'N/A'}`;
+                            return `
+                                <div class="projection-row col-span-8 flex items-center h-14">
+                                    <div class="w-[140px] px-3 text-[9px] font-black truncate text-gray-500 border-r h-full flex items-center bg-gray-50/20">
+                                        ${p.promotion_name}
+                                    </div>
+                                    <div class="flex-1 relative h-full">
+                                        <div class="absolute inset-0 grid grid-cols-7 pointer-events-none">
+                                            ${[0,1,2,3,4,5,6].map(() => `<div class="border-r border-gray-100 h-full"></div>`).join('')}
+                                        </div>
+                                        <div class="promo-bar ${getChannelColorClass(p.channel)}" 
+                                             style="left: ${leftPercent}%; width: ${widthPercent}%;" 
+                                             onclick="editPromotion(${p.id})"
+                                             title="${fullDetails}">
+                                            <div class="flex flex-col truncate leading-tight">
+                                                <div class="flex items-center space-x-1">
+                                                    <span class="font-black uppercase text-[6px] tracking-tighter opacity-80">[${p.promotion_type}]</span>
+                                                    <span class="truncate font-bold">${p.promotion_name}</span>
+                                                </div>
+                                                <div class="text-[7px] font-medium opacity-90 truncate italic">
+                                                    ${p.details || 'No details'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            }
+            container.innerHTML = html || `<div class="py-20 text-center text-gray-400">No data found</div>`;
+        }
 
         function openAddPromotionModal() { document.getElementById('addPromotionModal').classList.remove('hidden'); document.getElementById('addPromotionForm').reset(); document.getElementById('promoIdToEdit').value = ''; loadCategoryCheckboxes(); loadNameGroupCheckboxes(); loadProductCheckboxes(); }
         function closeAddPromotionModal() { document.getElementById('addPromotionModal').classList.add('hidden'); }
